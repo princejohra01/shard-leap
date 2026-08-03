@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Shard Leap — Endless Dodge Game</title>
+<meta name="description" content="Ek simple, addictive endless dodging game. Tap ya Space daba kar shards se bacho aur high score banao.">
+<style>
+  :root{
+    --bg:#0B1220;
+    --bg-deep:#060A12;
+    --cyan:#4CE0D2;
+    --orange:#FF7A45;
+    --purple:#7C6CF0;
+    --ink:#E8EDF2;
+    --ink-dim:#8CA0B3;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    height:100%;
+    background:var(--bg-deep);
+    overflow:hidden;
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  #wrap{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(124,108,240,0.10), transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(76,224,210,0.10), transparent 40%),
+      var(--bg);
+  }
+  canvas{
+    display:block;
+    background:transparent;
+    touch-action:none;
+    border-radius:0;
+  }
+  #hud{
+    position:absolute;
+    top:18px;
+    left:0;
+    right:0;
+    display:flex;
+    justify-content:space-between;
+    padding:0 22px;
+    pointer-events:none;
+    z-index:5;
+  }
+  .hud-item{
+    font-family:'Consolas', monospace;
+    color:var(--ink);
+    font-size:14px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    opacity:0.85;
+  }
+  .hud-item span{
+    color:var(--cyan);
+    font-size:22px;
+    display:block;
+    margin-top:2px;
+    letter-spacing:1px;
+  }
+  #overlay{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    z-index:10;
+    background:rgba(6,10,18,0.72);
+    backdrop-filter:blur(3px);
+    padding:20px;
+  }
+  #overlay.hidden{ display:none; }
+  #title{
+    font-size:clamp(32px,7vw,56px);
+    font-weight:800;
+    letter-spacing:1px;
+    background:linear-gradient(90deg,var(--cyan),var(--purple));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    margin-bottom:10px;
+  }
+  #subtitle{
+    color:var(--ink-dim);
+    font-size:15px;
+    margin-bottom:26px;
+    max-width:340px;
+    line-height:1.5;
+  }
+  #scoreLine{
+    color:var(--orange);
+    font-size:18px;
+    margin-bottom:20px;
+    font-family:'Consolas', monospace;
+    min-height:24px;
+  }
+  .btn{
+    background:linear-gradient(90deg,var(--cyan),var(--purple));
+    color:#08101A;
+    border:none;
+    padding:14px 36px;
+    font-size:16px;
+    font-weight:700;
+    border-radius:30px;
+    cursor:pointer;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    box-shadow:0 0 24px rgba(76,224,210,0.35);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .btn:active{ transform:scale(0.95); }
+  #hint{
+    margin-top:18px;
+    color:var(--ink-dim);
+    font-size:12px;
+    letter-spacing:1px;
+  }
+  #adslot{
+    width:100%;
+    max-width:728px;
+    min-height:90px;
+    margin:14px auto 0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--ink-dim);
+    font-size:11px;
+    letter-spacing:1px;
+    border:1px dashed rgba(140,160,179,0.25);
+    border-radius:6px;
+    z-index:5;
+  }
+  footer{
+    position:absolute;
+    bottom:6px;
+    width:100%;
+    text-align:center;
+    color:var(--ink-dim);
+    font-size:10px;
+    letter-spacing:1px;
+    opacity:0.5;
+    z-index:5;
+  }
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <div id="hud">
+    <div class="hud-item">Score<span id="scoreVal">0</span></div>
+    <div class="hud-item" style="text-align:right;">Best<span id="bestVal">0</span></div>
+  </div>
+
+  <canvas id="game"></canvas>
+
+  <div id="overlay">
+    <div id="title">SHARD LEAP</div>
+    <div id="subtitle">Neeche uڑte shards se bacho. Jump karke survive karo, jitni der tikoge utna score badhega.</div>
+    <div id="scoreLine"></div>
+    <button class="btn" id="startBtn">Play</button>
+    <div id="hint">Tap screen ya Space bar daba kar jump karo</div>
+  </div>
+
+  <!-- AD SLOT: AdSense approval milne ke baad, is div ke andar apna <ins class="adsbygoogle"> code paste karein -->
+  <div id="adslot">Ad space — AdSense code yahan paste karein</div>
+
+  <footer>Shard Leap · Original game · No copyrighted assets</footer>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const scoreVal = document.getElementById('scoreVal');
+  const bestVal = document.getElementById('bestVal');
+  const scoreLine = document.getElementById('scoreLine');
+  const startBtn = document.getElementById('startBtn');
+  const titleEl = document.getElementById('title');
+  const subtitleEl = document.getElementById('subtitle');
+
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const maxW = Math.min(window.innerWidth * 0.92, 480);
+    const maxH = Math.min(window.innerHeight * 0.72, 780);
+    W = maxW; H = maxH;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    groundY = H - 60;
+  }
+
+  let groundY;
+  const BEST_KEY = 'shardleap_best';
+  let best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10);
+  bestVal.textContent = best;
+
+  // Player orb
+  const player = {
+    x: 70,
+    y: 0,
+    r: 14,
+    vy: 0,
+    onGround: true,
+    trail: []
+  };
+
+  const GRAVITY = 0.85;
+  const JUMP_V = -14.5;
+
+  let obstacles = [];
+  let particles = [];
+  let speed = 4.2;
+  let spawnTimer = 0;
+  let spawnInterval = 95;
+  let frame = 0;
+  let score = 0;
+  let running = false;
+  let gameOver = false;
+
+  function resetGame(){
+    player.y = groundY - player.r;
+    player.vy = 0;
+    player.onGround = true;
+    player.trail = [];
+    obstacles = [];
+    particles = [];
+    speed = 4.2;
+    spawnTimer = 0;
+    spawnInterval = 95;
+    frame = 0;
+    score = 0;
+    gameOver = false;
+    scoreVal.textContent = '0';
+  }
+
+  function jump(){
+    if(!running){ return; }
+    if(player.onGround){
+      player.vy = JUMP_V;
+      player.onGround = false;
+      for(let i=0;i<8;i++){
+        particles.push({
+          x: player.x, y: player.y+player.r,
+          vx: (Math.random()-0.5)*3,
+          vy: Math.random()*-2,
+          life: 20, color: 'cyan'
+        });
+      }
+    }
+  }
+
+  function spawnObstacle(){
+    const type = Math.random();
+    const size = 18 + Math.random()*16;
+    let h = size;
+    let variant = 'shard';
+    if(type > 0.7){
+      // flying shard - requires jump timing but appears higher
+      variant = 'floating';
+      h = size;
+    }
+    obstacles.push({
+      x: W + 40,
+      y: variant === 'floating' ? groundY - 70 - Math.random()*30 : groundY,
+      w: size*0.7,
+      h: h,
+      variant,
+      passed:false
+    });
+  }
+
+  function rectCircleColliding(circle, rect){
+    const distX = Math.abs(circle.x - (rect.x));
+    const distY = Math.abs(circle.y - (rect.y - rect.h/2));
+    if (distX > (rect.w/2 + circle.r)) return false;
+    if (distY > (rect.h/2 + circle.r)) return false;
+    if (distX <= (rect.w/2)) return true;
+    if (distY <= (rect.h/2)) return true;
+    const dx = distX - rect.w/2;
+    const dy = distY - rect.h/2;
+    return (dx*dx + dy*dy <= circle.r*circle.r);
+  }
+
+  function update(){
+    frame++;
+
+    // player physics
+    player.vy += GRAVITY;
+    player.y += player.vy;
+    if(player.y > groundY - player.r){
+      player.y = groundY - player.r;
+      player.vy = 0;
+      player.onGround = true;
+    }
+
+    player.trail.push({x:player.x, y:player.y});
+    if(player.trail.length > 10) player.trail.shift();
+
+    // spawn
+    spawnTimer++;
+    if(spawnTimer >= spawnInterval){
+      spawnTimer = 0;
+      spawnObstacle();
+      spawnInterval = Math.max(48, spawnInterval - 0.6);
+    }
+
+    // obstacles
+    for(let i=obstacles.length-1;i>=0;i--){
+      const o = obstacles[i];
+      o.x -= speed;
+
+      const rectForCollide = { x:o.x, y:o.y, w:o.w, h:o.h };
+      if(rectCircleColliding({x:player.x,y:player.y,r:player.r-3}, rectForCollide)){
+        endGame();
+      }
+
+      if(!o.passed && o.x + o.w < player.x){
+        o.passed = true;
+        score += 1;
+        scoreVal.textContent = score;
+      }
+
+      if(o.x < -60) obstacles.splice(i,1);
+    }
+
+    // particles
+    for(let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life--;
+      if(p.life<=0) particles.splice(i,1);
+    }
+
+    speed += 0.0025;
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // ground line
+    ctx.strokeStyle = 'rgba(140,160,179,0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY+player.r+4);
+    ctx.lineTo(W, groundY+player.r+4);
+    ctx.stroke();
+
+    // trail
+    for(let i=0;i<player.trail.length;i++){
+      const t = player.trail[i];
+      const alpha = (i/player.trail.length) * 0.25;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(76,224,210,${alpha})`;
+      ctx.arc(t.x, t.y, player.r*0.6, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // player glow
+    const grad = ctx.createRadialGradient(player.x,player.y,2,player.x,player.y,player.r*2.4);
+    grad.addColorStop(0,'rgba(76,224,210,0.9)');
+    grad.addColorStop(1,'rgba(76,224,210,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r*2.4, 0, Math.PI*2);
+    ctx.fill();
+
+    // player core
+    ctx.beginPath();
+    ctx.fillStyle = '#E8EDF2';
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle = '#4CE0D2';
+    ctx.arc(player.x, player.y, player.r*0.55, 0, Math.PI*2);
+    ctx.fill();
+
+    // obstacles - geometric shards
+    obstacles.forEach(o=>{
+      ctx.save();
+      ctx.translate(o.x, o.y - o.h/2);
+      const pulse = 1 + Math.sin(frame*0.15 + o.x*0.05)*0.05;
+      ctx.scale(pulse,pulse);
+      const g = ctx.createLinearGradient(0,-o.h/2,0,o.h/2);
+      if(o.variant==='floating'){
+        g.addColorStop(0,'#7C6CF0');
+        g.addColorStop(1,'#4CE0D2');
+      } else {
+        g.addColorStop(0,'#FF7A45');
+        g.addColorStop(1,'#7C6CF0');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(0,-o.h/2);
+      ctx.lineTo(o.w/2,0);
+      ctx.lineTo(0,o.h/2);
+      ctx.lineTo(-o.w/2,0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    });
+
+    // particles
+    particles.forEach(p=>{
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(76,224,210,${Math.max(p.life/20,0)})`;
+      ctx.arc(p.x,p.y,2.5,0,Math.PI*2);
+      ctx.fill();
+    });
+  }
+
+  function loop(){
+    if(running && !gameOver){
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    } else if(!gameOver){
+      draw();
+      requestAnimationFrame(loop);
+    }
+  }
+
+  function endGame(){
+    if(gameOver) return;
+    gameOver = true;
+    running = false;
+    if(score > best){
+      best = score;
+      localStorage.setItem(BEST_KEY, best);
+      bestVal.textContent = best;
+    }
+    titleEl.textContent = 'GAME OVER';
+    subtitleEl.textContent = 'Shard tumhe lag gaya. Phir se try karo!';
+    scoreLine.textContent = 'Score: ' + score + '   Best: ' + best;
+    startBtn.textContent = 'Retry';
+    overlay.classList.remove('hidden');
+  }
+
+  function startGame(){
+    resetGame();
+    running = true;
+    gameOver = false;
+    overlay.classList.add('hidden');
+    requestAnimationFrame(loop);
+  }
+
+  startBtn.addEventListener('click', startGame);
+
+  window.addEventListener('keydown', (e)=>{
+    if(e.code === 'Space'){
+      e.preventDefault();
+      if(overlay.classList.contains('hidden')){
+        jump();
+      } else {
+        startGame();
+      }
+    }
+  });
+
+  canvas.addEventListener('pointerdown', ()=>{
+    if(!overlay.classList.contains('hidden')) return;
+    jump();
+  });
+
+  document.body.addEventListener('pointerdown', (e)=>{
+    if(!overlay.classList.contains('hidden')){
+      // overlay click handled by button; ignore background
+    }
+  });
+
+  window.addEventListener('resize', resize);
+  resize();
+  player.y = groundY - player.r;
+  draw();
+})();
+</script>
+
+</body>
+</html>
